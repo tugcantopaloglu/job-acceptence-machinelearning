@@ -21,6 +21,9 @@ class DataHandler():
             self.validate_data = pd.read_csv("./data/validate_data.txt")
             self.test_data = pd.read_csv("./data/test_data.txt")
         else:
+            if not hasattr(self, "csv_data"):
+                self.DataScrapper()
+            os.makedirs("./data", exist_ok=True)
             self.train_data, self.temp_data = train_test_split(self.csv_data, test_size=0.4, random_state=42, stratify=self.csv_data["Admitted"])
             self.validate_data, self.test_data = train_test_split(self.temp_data, test_size=0.5, random_state=42, stratify=self.temp_data["Admitted"])
             self.train_data.to_csv("./data/train_data.txt", index=False)

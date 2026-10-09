@@ -1,121 +1,67 @@
-# Job Acceptance Prediction ML Model
+# Exam-score logistic regression experiment
 
-This repository contains a machine learning model designed to predict the likelihood of a job candidate accepting a job offer based on various features. The goal of the project is to assist recruiters in understanding candidate preferences and optimizing their hiring strategies.
+An educational binary classification exercise implementing logistic regression with scalar stochastic gradient descent. The included data has two exam-score features (`Exam1`, `Exam2`) and an admission label (`Admitted`). Despite the repository name, it does not contain job offer acceptance features, a recruiting API, notebooks, or a saved-model prediction interface.
 
-## Features
+## Setup and run
 
-- **Predictive Analysis**: Uses historical data to predict job acceptance likelihood.
-- **Customizable Model**: Easily adaptable to various industries by tweaking the dataset and model parameters.
-- **End-to-End Pipeline**: From data preprocessing to model evaluation.
+Use Python 3.10 or newer; the regression checks use Python 3.12 and the versions in `requirements.txt`. Run commands from the repository root because data and output paths are relative to the working directory.
 
-## Technologies Used
-
-- **Programming Language**: Python
-- **Libraries**:
-  - Scikit-learn
-  - Pandas
-  - NumPy
-  - Matplotlib/Seaborn (for data visualization)
-- **Jupyter Notebook**: For code development and demonstration
-
-## Project Structure
-
-```
-├── data/                # Dataset files
-├── notebooks/           # Jupyter notebooks for analysis and modeling
-├── src/                 # Source code for preprocessing and model training
-├── models/              # Saved trained models
-├── README.md            # Project documentation
+```bash
+git clone https://github.com/tugcantopaloglu/job-acceptence-machinelearning.git
+cd job-acceptence-machinelearning
+python -m venv .venv
 ```
 
-## Installation
+Activate the environment (`.venv\Scripts\Activate.ps1` in PowerShell, or `source .venv/bin/activate` on Linux/macOS), then:
 
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/tugcantopaloglu/job-acceptence-ml-model.git
-   ```
-
-2. Navigate to the project directory:
-
-   ```bash
-   cd job-acceptence-ml-model
-   ```
-
-3. Install the required Python libraries:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-## Usage
-
-1. Prepare your dataset:
-   - Ensure the dataset is in the correct format and place it in the `data/` directory.
-
-2. Run the Jupyter notebook to train and evaluate the model:
-   - Open the terminal and run:
-
-     ```bash
-     jupyter notebook
-     ```
-   - Navigate to the relevant notebook in the `notebooks/` folder and follow the steps.
-
-3. Evaluate predictions:
-   - Use the saved model from the `models/` directory to make predictions on new data.
-
-## Example
-
-Here is an example of how to load the trained model and make a prediction:
-
-```python
-from src.model_utils import load_model, predict
-
-# Load the model
-model = load_model('models/job_acceptance_model.pkl')
-
-# Sample candidate data
-candidate_data = {
-    'experience_years': 5,
-    'education_level': 'Master',
-    'expected_salary': 75000,
-    'job_location': 'Remote'
-}
-
-# Make prediction
-prediction = predict(model, candidate_data)
-print(f"Job Acceptance Probability: {prediction}")
+```bash
+python -m pip install -r requirements.txt
+python main.py
 ```
 
-## Contribution
+The default run displays Matplotlib plots, trains a baseline for 50 epochs and a regularized model for up to 1,000 epochs. To run a small, headless check:
 
-Contributions are welcome! To contribute:
+```bash
+python main.py --no-plots --epochs 2 --regularized-epochs 3
+```
 
-1. Fork the repository.
-2. Create a new branch:
+## Data and evaluation
 
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+`data/hw1Data.txt` is a headerless CSV in `Exam1,Exam2,Admitted` order. The cached split files have headers. If all three split files exist, they are reused. Otherwise, the loader reads the raw file and creates stratified 60% training, 20% validation and 20% test splits using random state 42. To change the dataset, prepare a separate working copy with matching raw data and regenerate all three split files together.
 
-3. Commit your changes:
+Both models fit only the training split. Each model selects its own probability threshold from 0.10 through 0.99 in steps of 0.01 by maximizing validation F1. It then reports test accuracy, precision, recall and F1 at both 0.5 and the selected threshold. Test labels do not influence threshold selection. Regularized early stopping monitors the training epoch loss, rather than validation loss.
 
-   ```bash
-   git commit -m "Add your message here"
-   ```
+The hand-written model has no intercept or feature scaling. This preserves the educational algorithm and can limit its accuracy on the included positive exam scores. The test checks below validate behavior, not a claimed model-quality benchmark.
 
-4. Push to the branch:
+## Files and outputs
 
-   ```bash
-   git push origin feature/your-feature-name
-   ```
+| Path | Purpose |
+| --- | --- |
+| `DataHandler.py` | CSV loading, cached splitting and training-data scatter plot |
+| `LogisticRegression.py` | Sigmoid, cross-entropy, SGD, L2 regularization and binary metrics |
+| `main.py` | Training, validation threshold selection and held-out test evaluation |
+| `results/epoch_loss_output.txt` | Appended epoch loss logs |
+| `results/weights.txt` | Appended model weights |
+| `results/scores.txt` | Appended test metric logs |
+| `IEEE_Report.pdf` | Historical course report |
+| `tests/test_regressions.py` | Small regression fixtures and an actual CLI run |
 
-5. Open a pull request.
+The `results` directory is created when needed. Plots are displayed interactively; this code does not automatically export plot PNG files.
 
-## License
+## Historical result provenance
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+The checked-in reports, plots and text logs are historical artifacts. Their exact environment and run identity are not recorded. The earlier script trained additional models on the validation split and optimized thresholds on the test split, including applying another model's threshold to the baseline. Historical tuned scores therefore cannot be treated as unbiased held-out estimates, and are not claims about the current code. Runs append logs; use a separate working copy for a clean experiment.
 
-## Acknowledgements
+This repository and [job-acceptence-logistic-regression-machine-learning](https://github.com/tugcantopaloglu/job-acceptence-logistic-regression-machine-learning) contain related copies of the educational experiment and remain separate projects with their own licenses.
 
-Special thanks to the open-source community and the contributors of the Python libraries used in this project.
+## Regression checks
+
+```bash
+python -m pip install pytest
+python -m pytest -q
+python -m pip check
+```
+
+The tests cover stable sigmoid values at extreme inputs, metric length validation, validation-only threshold selection, missing split/output handling, and a two-model CLI run on 40 fixture rows. They do not regenerate historical research results.
+
+Licensed under the Apache License 2.0; see [LICENSE](LICENSE).

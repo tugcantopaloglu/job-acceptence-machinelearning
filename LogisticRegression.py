@@ -1,5 +1,6 @@
 #burada her şeyi kendim yazmaya çalıştım hesaplamaları derste öğrendiğimiz fonksiyonlardan aldığım notlardan oluşturdum aşağıdaki kütüphaneleri sadece matematik işlemleri ve görselleştirme için ekledim
 import math
+from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 import DataHandler
@@ -10,8 +11,10 @@ class LogisticRegression():
     
     #x e^-x si ifade ediyor
     def Sigmoid(self, x):
-        e = 2.718281828459
-        return 1/(1 + e**(-1*x))
+        if x >= 0:
+            return 1 / (1 + math.exp(-x))
+        exponential = math.exp(x)
+        return exponential / (1 + exponential)
     
     #gerçek değer ile bulunan değeri alıyoruz ve yine cross entropy'de kullanıyoruz bunu yapark 1 ile 1-epsilon arasına sıkıştırıyoruz
     def CrossEntropyLoss(self, y_target, y_predict):
@@ -23,6 +26,7 @@ class LogisticRegression():
 
     #x girdi özellikleri ve y çıkış etiketleri olacak şekilde weights güncellenmiş ağırlıklardır öğrenme oranı ve epoch sayısını fonksiyonda alıyoruz bu şekilde farklı epochlarda dönebiliriz. her örnek için bu işlemleri yapıyoruz ve kendi oluşturduğumuz fonksiyonlar ile yapıyoruz bu işlemi yaparken her ağırlık için ağırlar gradientini de buluyoruz buradaki epoch loss her epochtaki bu loss'u gösteriyor 
     def StochasticGradientDescent(self, x, y, weights, learning_rate, epochs):
+        Path("./results").mkdir(parents=True, exist_ok=True)
         sample_num = len(y)
         epoch_losses = []
         with open("./results/epoch_loss_output.txt", 'a+') as f:
@@ -45,6 +49,7 @@ class LogisticRegression():
             f.write("Model Name: " + self.model_name + "\n")
             f.write("Weights: " + str(weights) + "\n")
         self.weights = weights
+        self.epoch_losses = epoch_losses
         return epoch_losses
     
     def GenerateLossGraph(self, epoch_losses):
@@ -70,6 +75,7 @@ class LogisticRegression():
     
     #daha önce yaptığımız işleme L2 regularization ekledik burada lambda_reg L2 regularization katsayısı ve patience ise early stopping için aynı değerin gelebileceği maksimum patience yani aslında burada hem calculate stopping epoch'ta yapmaya çalıştığım şeyi birleştirdim hem de regularization ekleyerek sonuçların overfittingten kurtulmasını sağlamaya çalıştım. kısaca loss hesapladığımız bölümde regularization da ekleyerek loss hesapladık
     def StochasticGradientDescentWithRegularization(self, x, y, weights, learning_rate, epochs, lambda_reg=0.01, patience=5):
+        Path("./results").mkdir(parents=True, exist_ok=True)
         sample_num = len(y)
         epoch_losses = []
         best_loss = float('inf')
@@ -110,6 +116,7 @@ class LogisticRegression():
             f.write("Model Name: " + self.model_name + "\n")
             f.write("Weights: " + str(weights) + "\n")
         self.weights = weights
+        self.epoch_losses = epoch_losses
         return epoch_losses
     
     #formüllere göre metrikleri hesaplıyoruz: TP = Doğru Pozitif (doğru tahmin ettik ve doğru olmalıydı), FP = yanlış pozitif (doğru tahmin ettik yanlış olmalıydı), TN = doğru negatif (yanlış tahmin ettik yanlış olmalıydı), FN = yanlış negatif (yanlış tahmin ettik ama doğru olmalıydı)
@@ -118,6 +125,8 @@ class LogisticRegression():
     #duyarlılık = TP/(TP+FP)
     #F1 skoru = 2*((kesinlik*duyarlılık)/(kesinlik+duyarlılık))
     def Metrics(self, y_target, y_predicted):
+        if len(y_target) != len(y_predicted):
+            raise ValueError("Targets and predictions must have the same length")
         TP = sum((yt == 1 and yp == 1) for yt, yp in zip(y_target, y_predicted))
         FP = sum((yt == 0 and yp == 1) for yt, yp in zip(y_target, y_predicted))
         TN = sum((yt == 0 and yp == 0) for yt, yp in zip(y_target, y_predicted))
@@ -134,16 +143,13 @@ class LogisticRegression():
     def CalculateMetricsOnTestData(self,threshold = 0.5,check_threshold=False):
         data_handler = DataHandler.DataHandler("./data/hw1Data.txt")
         data_handler.DataSplitter()
-        x_test = data_handler.TestDataGet()[["Exam1", "Exam2"]].to_numpy()
-        y_test = data_handler.TestDataGet()["Admitted"].to_numpy()
-        y_prediction = []
-        for i in range(len(y_test)):
-            lineer_combination = sum(self.weights[j] * x_test[i][j] for j in range(len(self.weights)))
-            y_prediction.append(1 if self.Sigmoid(lineer_combination) >= threshold else 0)
+        test_data = data_handler.TestDataGet()
+        accuracy, precision, recall, f1_score = self.CalculateMetrics(
+            test_data[["Exam1", "Exam2"]].to_numpy(),
+            test_data["Admitted"].to_numpy(), threshold
+        )
+        Path("./results").mkdir(parents=True, exist_ok=True)
 
-        # Metrikleri hesapla
-        accuracy, precision, recall, f1_score = self.Metrics(y_test, y_prediction)
-        
         #optimum thresholdu bulurken bu çıktıları vermesini istemiyoruz bundan dolayı böyle bir kontrol yapıyoruz
         if (check_threshold == False):
             if threshold != 0.5:
@@ -188,3 +194,23 @@ class LogisticRegression():
         
 
 
+
+    def CalculateMetrics(self, x, y, threshold=0.5):
+        if not 0 <= threshold <= 1:
+            raise ValueError("Threshold must be between zero and one")
+        if len(x) != len(y):
+            raise ValueError("Features and targets must have the same length")
+        predictions = [
+            int(self.Sigmoid(sum(weight * feature for weight, feature in zip(self.weights, row))) >= threshold)
+            for row in x
+        ]
+        return self.Metrics(y, predictions)
+
+    def CalculateMetricsOnValidationData(self, threshold=0.5):
+        data_handler = DataHandler.DataHandler("./data/hw1Data.txt")
+        data_handler.DataSplitter()
+        validation_data = data_handler.ValidateDataGet()
+        return self.CalculateMetrics(
+            validation_data[["Exam1", "Exam2"]].to_numpy(),
+            validation_data["Admitted"].to_numpy(), threshold
+        )[3]

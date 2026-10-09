@@ -1,60 +1,54 @@
-#Modülerlik sağlanması amacıyla tüm işlemler farklı class'larda yapılıp burada bulunan main classında çağrılmıştır
-import DataHandler
-import LogisticRegression 
+import argparse
 import numpy as np
+import DataHandler
+import LogisticRegression
+
+
 def main():
-    ### verileri alıyoruz burada data içerisinde bölünmüş halde veriler zaten bulunuyorsa işlem yapmıyoruz ###
+    parser = argparse.ArgumentParser(description="Train and evaluate the exam-score logistic regression experiment")
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--regularized-epochs", type=int, default=1000)
+    parser.add_argument("--no-plots", action="store_true")
+    args = parser.parse_args()
+    if args.epochs < 1 or args.regularized_epochs < 1:
+        parser.error("Epoch counts must be positive")
+
     data = DataHandler.DataHandler("./data/hw1Data.txt")
-    data.DataScrapper()
     data.DataSplitter()
-    data.DataVisualazation()
-     
+    if not args.no_plots:
+        data.DataVisualazation()
+    x_train = data.TrainDataGet()[["Exam1", "Exam2"]].to_numpy()
+    y_train = data.TrainDataGet()["Admitted"].to_numpy()
 
-    ### train ###
-    logistic_regression_train = LogisticRegression.LogisticRegression(model_name="Train Model")
-    train_epoch_losses = logistic_regression_train.StochasticGradientDescent(data.TrainDataGet()[["Exam1","Exam2"]].to_numpy(), data.TrainDataGet()["Admitted"].to_numpy(), [0.0,0.0], 0.001, 50)
-    logistic_regression_train.GenerateLossGraph(train_epoch_losses)
+    baseline = LogisticRegression.LogisticRegression("Train Model")
+    baseline_losses = baseline.StochasticGradientDescent(x_train, y_train, [0.0, 0.0], 0.001, args.epochs)
+    regularized = LogisticRegression.LogisticRegression("Improved Train Model")
+    regularized_losses = regularized.StochasticGradientDescentWithRegularization(
+        x_train, y_train, [0.0, 0.0], 0.001, args.regularized_epochs, lambda_reg=0.01, patience=5
+    )
+    if not args.no_plots:
+        baseline.GenerateLossGraph(baseline_losses)
+        regularized.GenerateLossGraph(regularized_losses)
 
-    ### validate ###
-    logistic_regression_validate= LogisticRegression.LogisticRegression(model_name="Validate Model")
-    validate_epoch_losses = logistic_regression_validate.StochasticGradientDescent(data.ValidateDataGet()[["Exam1","Exam2"]].to_numpy(), data.ValidateDataGet()["Admitted"].to_numpy(), [0.0,0.0], 0.001, 50)
-    logistic_regression_validate.GenerateLossGraph(validate_epoch_losses)
-    
-    ### L2 regularization iyileştirmesi iyileştirme uygulanmış train ###
-    logistic_regression_improved_train = LogisticRegression.LogisticRegression("Improved Train Model")
-    improved_train_epoch_losses = logistic_regression_improved_train.StochasticGradientDescentWithRegularization(data.TrainDataGet()[["Exam1","Exam2"]].to_numpy(), data.TrainDataGet()["Admitted"].to_numpy(), [0.0,0.0], 0.001, 1000,lambda_reg=0.01,patience=5)
-    logistic_regression_improved_train.GenerateLossGraph(improved_train_epoch_losses)
-    
-    ### L2 regularization iyileştirmesi uygulanmış validate ###
-    logistic_regression_improved_validate = LogisticRegression.LogisticRegression("Improved Validate Model")
-    improved_validate_epoch_losses = logistic_regression_improved_validate.StochasticGradientDescentWithRegularization(data.ValidateDataGet()[["Exam1","Exam2"]].to_numpy(), data.ValidateDataGet()["Admitted"].to_numpy(), [0.0,0.0], 0.001, 1000)
-    logistic_regression_improved_validate.GenerateLossGraph(improved_validate_epoch_losses)
-    
-    ### 4 model için de skorları yazdıralım (2 train 2 validate) (threshold=default)###
-    #burada threshold değerlerini standart 0.5 vererek yapıyoruz ardından başarıyı arttırmak için optimal thresholdu bulup onunla da sonuçlara bakacağız
-    logistic_regression_train.CalculateMetricsOnTestData()
-    logistic_regression_validate.CalculateMetricsOnTestData()
-    logistic_regression_improved_train.CalculateMetricsOnTestData()
-    logistic_regression_improved_validate.CalculateMetricsOnTestData()
-    
-    ### 4 model için de skorları yazdıralım (2 train 2 validate) (threshold=optimum) ###
-    ### bu işlem overfittinge yol açabilir ancak test datası üzerinde başarıyı arttırmak amaçlanmıştır ancak overfitting ihtimali olabilir ###
-    logistic_regression_train.CalculateMetricsOnTestData(threshold=CalculateBestThreshold(logistic_regression_improved_train))
-    logistic_regression_validate.CalculateMetricsOnTestData(threshold=CalculateBestThreshold(logistic_regression_validate))
-    logistic_regression_improved_train.CalculateMetricsOnTestData(threshold=CalculateBestThreshold(logistic_regression_improved_train))
-    logistic_regression_improved_validate.CalculateMetricsOnTestData(threshold=CalculateBestThreshold(logistic_regression_improved_validate))
-    
-def CalculateBestThreshold(model, precision = 0.01):
-    thresholds = np.arange(0.1,1.0,precision)
-    best_f1= 0
-    best_threshold = 0
-    for i in thresholds:
-        value = model.CalculateMetricsOnTestData(threshold=i,check_threshold=True)
+    for model in (baseline, regularized):
+        threshold = CalculateBestThreshold(model)
+        model.CalculateMetricsOnTestData()
+        model.CalculateMetricsOnTestData(threshold=threshold)
+
+
+def CalculateBestThreshold(model, precision=0.01):
+    if not 0 < precision < 1:
+        raise ValueError("Threshold step must be between zero and one")
+    best_f1 = -float("inf")
+    best_threshold = 0.5
+    for threshold in np.arange(0.1, 1.0, precision):
+        value = model.CalculateMetricsOnValidationData(threshold=threshold)
         if value > best_f1:
-            best_threshold = i
+            best_threshold = float(threshold)
             best_f1 = value
-    print("Best Threshold For " + model.model_name + ":" + str(best_threshold))
+    print(f"Best validation threshold for {model.model_name}: {best_threshold}")
     return best_threshold
-    
+
+
 if __name__ == "__main__":
     main()
